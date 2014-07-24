@@ -13,6 +13,7 @@ public class Match implements Comparable {
     tar = i;
     score = prev.score;
     score = score + Simple.params.get(Simple.uni(seq[src], seq[tar], 0));
+    score = score + Simple.params.get(Simple.dif(src, tar));
     if(prev != null){
       score = score + Simple.params.get(Simple.bi(prev.tar, tar));
     }

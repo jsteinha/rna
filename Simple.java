@@ -40,6 +40,12 @@ public class Simple implements Runnable {
     else return "??";
   }
 
+  static String dif(int i, int j){
+    if(i == 0 || j == 0) return "DU";
+    if(Math.abs(i-j) <= 5) return "D"+Math.abs(i-j);
+    else return "D*";
+  }
+
   static void printFeatures(){
     LogInfo.begin_track("params");
     for(String str : params.keySet()){
@@ -62,6 +68,8 @@ public class Simple implements Runnable {
   static void featurize(char[] seq, int[] match, int N, double x){
     String index;
     for(int n = 1; n <= N; n++){
+      index = dif(n, match[n]);
+      update(index, x);
       for(int k = -3; k <= 3; k++){
         if(1 <= n+k && n+k <= N){
           index = uni(seq[n+k], seq[match[n]], k);
