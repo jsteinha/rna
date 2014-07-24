@@ -18,60 +18,66 @@ public class Simple implements Runnable {
   @Option(required=true)
   public static double eta;
 
-  public static double[] theta = new double[8*9 + 6],
-                         G2    = new double[8*9 + 6];
-  static char[] i2c = new char[]{'a','u','g','c','A','U','G','C','0'};
-  static int[] c2i = new int[256];
+  static Params G2 = new Params(),
+                params = new Params();
 
-  static int uni(char x, char y){
-    return 9*c2i[x] + c2i[y];
+  static String uni(char x, char y, int offset){
+    if(offset == 0){
+      return x + "=" + y;
+    } else if(offset > 0){
+      return x+" "+y + "+" + offset;
+    } else {
+      return x+" "+y + "-" + (-offset);
+    }
   }
 
-  static int bi(int i, int j){
-    int offset;
-    if(i == 0 && j == 0) offset = 0;
-    else if(i == 0) offset = 1;
-    else if(j == 0) offset = 2;
-    else if(i-j == 1) offset = 3;
-    else if(i-j == -1) offset = 4;
-    else offset = 5;
-    return 8*9 + offset;
+  static String bi(int i, int j){
+    if(i == 0 && j == 0) return "00";
+    else if(i == 0) return "0x";
+    else if(j == 0) return "x0";
+    else if(i-j == 1) return "+1";
+    else if(i-j == -1) return "-1";
+    else return "??";
   }
 
   static void printFeatures(){
-    for(int i=0;i<8;i++){
-      for(int j=0;j<9;j++){
-        LogInfo.logs(i2c[i] + "-"+i2c[j]+": " + theta[9*i+j]);
-      }
+    LogInfo.begin_track("params");
+    for(String str : params.keySet()){
+      LogInfo.logs("%s: %f", str, params.get(str));
     }
-    LogInfo.logs(" 00: " + theta[8*9+0]);
-    LogInfo.logs(" 0x: " + theta[8*9+1]);
-    LogInfo.logs(" x0: " + theta[8*9+2]);
-    LogInfo.logs(" +1: " + theta[8*9+3]);
-    LogInfo.logs(" -1: " + theta[8*9+4]);
-    LogInfo.logs(" ??: " + theta[8*9+5]);
+    LogInfo.end_track();
   }
 
-  static boolean adagrad = false;
-  static void update(int index, double x){
+  static boolean adagrad = false, onTest = false;
+  static void update(String key, double x){
+    if(onTest) return;
     if(adagrad){
-      G2[index] += x * x;
-      theta[index] += eta * x / Math.sqrt(1e-4 + G2[index]);
+      G2.update(key, x * x);
+      params.update(key, eta * x / Math.sqrt(1e-4 + G2.get(key)));
     } else {
-      theta[index] += eta * x;
+      params.update(key, eta * x);
     }
   }
 
   static void featurize(char[] seq, int[] match, int N, double x){
-    int index;
+    String index;
     for(int n = 1; n <= N; n++){
-      index = uni(seq[n], match[n] == 0 ? '0' : seq[match[n]]);
-      update(index, x);
+      for(int k = -3; k <= 3; k++){
+        if(1 <= n+k && n+k <= N){
+          index = uni(seq[n+k], seq[match[n]], k);
+          update(index, x);
+        }
+      }
       if(n < N){
         index=bi(match[n], match[n+1]);
         update(index, x);
       }
     }
+  }
+
+  static char F(char x){
+    if(x == 0) return '*';
+    else return x;
   }
 
   public void run() {
@@ -84,12 +90,13 @@ public class Simple implements Runnable {
   }
 
   void runWithException() throws Exception {
-    for(int i=0;i<i2c.length;i++) c2i[(int)i2c[i]] = i;
 
     ArrayList<Example> examples = new ArrayList<Example>();
     for(final File file : new File("data").listFiles()){
       examples.add(Reader.read(file));
     }
+
+    Collections.shuffle(examples, new Random(0L));
 
     // initialize with pseudolikelihood
     for(Example ex : examples){
@@ -97,23 +104,29 @@ public class Simple implements Runnable {
       featurize(ex.seq, ex.match, ex.N, 1.0);
     }
 
-    for(int i = 0; i < theta.length; i++){
-      theta[i] = Math.log(theta[i] + eta * 1e-1);
+    for(String str : params.keySet()){
+      params.put(str, Math.log(params.get(str) + eta * 1e-1));
     }
 
     printFeatures();
 
     adagrad = true;
+    int numTrain = 1500, numTest = examples.size() - numTrain;
     for(int t = 1; t <= 15; t++){
       LogInfo.begin_track("Starting iteration %d", t);
       double tot = 0.0;
+      int count = 0;
       for(Example ex : examples){
+        onTest = count++ >= numTrain;
         int[] pred = predict(ex.seq, ex.N, ex.match);
         double score = sim(pred, ex.match, ex.N);
-        LogInfo.logs("score="+String.format("%.3f", score));
-        tot += score;
+        LogInfo.begin_track("score="+String.format("%.3f", score));
+        for(int i = 1; i <= ex.N; i++)
+          LogInfo.logs("%s %d/%s %d/%s\n", ex.seq[i], ex.match[i], F(ex.seq[ex.match[i]]), pred[i], F(ex.seq[pred[i]]));
+        LogInfo.end_track();
+        if(onTest) tot += score;
       }
-      LogInfo.logs("%.3f: %.1f/%.1f", tot/examples.size(), tot, 1.0*examples.size());
+      LogInfo.logs("%.3f: %.1f/%.1f", tot/numTest, tot, 1.0*numTest);
       printFeatures();
       LogInfo.end_track();
     }
@@ -177,8 +190,8 @@ public class Simple implements Runnable {
       Match m = beam.get(i);
       int[] match = m.toArray();
       source[i] = m.score;
-      //double ll = Math.log(sim(match, match0, N));
-      double ll = sim(match, match0, N);
+      double ll = Math.log(sim(match, match0, N));
+      //double ll = sim(match, match0, N);
       target[i] = source[i] + ll;
     }
     Util.logNormalize(source);

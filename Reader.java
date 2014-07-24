@@ -19,6 +19,7 @@ public class Reader {
         match[n] = Integer.parseInt(line[4]);
         //System.out.println(seq[n] + " " + match[n]);
       }
+      seq[0] = '0';
       return new Example(seq, match, file.getName());
     } catch(Exception e){
       throw new RuntimeException("Exception in file " + file.getName() + ":\n\t" + e.toString());

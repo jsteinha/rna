@@ -12,9 +12,16 @@ public class Match implements Comparable {
     src = n;
     tar = i;
     score = prev.score;
-    score = score + Simple.theta[Simple.uni(seq[n], i == 0 ? '0' : seq[i])];
+    score = score + Simple.params.get(Simple.uni(seq[src], seq[tar], 0));
     if(prev != null){
-      score = score + Simple.theta[Simple.bi(prev.tar, tar)];
+      score = score + Simple.params.get(Simple.bi(prev.tar, tar));
+    }
+    Match ptr = prev;
+    for(int k = 1; k <= 3; k++){
+      if(ptr == null) break;
+      score = score + Simple.params.get(Simple.uni(seq[ptr.src], seq[tar], -k));
+      score = score + Simple.params.get(Simple.uni(seq[src], seq[ptr.tar], k));
+      ptr = ptr.prev;
     }
   }
   public Match(int[] match, char[] seq){
