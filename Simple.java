@@ -19,7 +19,33 @@ public class Simple implements Runnable {
   public static double eta;
 
   static Params G2 = new Params(),
-                params = new Params();
+                params = new Params(),
+                counts = new Params();
+  static Assoc<String> assoc = new Assoc<String>();
+
+  static void printSorted(Params d){
+    ArrayList<Map.Entry<String,Double> > lst = new ArrayList<Map.Entry<String,Double> >(d.entrySet());
+    Collections.sort(lst, new Comparator<Map.Entry<String,Double> >(){
+      @Override
+      public int compare(Map.Entry<String,Double> a, Map.Entry<String,Double> b){
+        return (int)Math.round(Math.signum(b.getValue()-a.getValue()));
+      }
+    });
+    double Z = 0.0, cum = 0.0;
+    for(Map.Entry<String,Double> e : lst) Z += e.getValue();
+    int cutoff = 300, cur = 0; // this cutoff prunes out 90% of all possibilities 
+                               // but only 10% of correct possibilities
+    LogInfo.begin_track("printing sorted params");
+    for(Map.Entry<String,Double> e : lst){
+      cum += e.getValue();
+      LogInfo.logs("%s\t%f\t%f", e.getKey(), e.getValue(), cum/Z);
+      if(cur++ < cutoff){
+        String[] tokens = e.getKey().split(":");
+        assoc.add(tokens[0], tokens[1]);
+      }
+    }
+    LogInfo.end_track();
+  }
 
   static String uni(char x, char y, int offset){
     if(offset == 0){
@@ -109,8 +135,25 @@ public class Simple implements Runnable {
     // initialize with pseudolikelihood
     for(Example ex : examples){
       LogInfo.logs(ex.name);
+      int W=3;
+      for(int i=1;i<=ex.N-W+1;i++){
+        String src = "", tar = "";
+        for(int j=i;j<=i+W-1;j++){
+          src += ex.seq[j];
+          tar += ex.seq[ex.match[j]];
+        }
+        if(tar.contains("0")) continue;
+        counts.update(src+":"+tar, 1.0);
+      }
       featurize(ex.seq, ex.match, ex.N, 1.0);
     }
+
+    printSorted(counts);
+
+    for(Example ex: examples){
+      ex.generateProposals();
+    }
+    System.exit(0);
 
     for(String str : params.keySet()){
       params.put(str, Math.log(params.get(str) + eta * 1e-1));
