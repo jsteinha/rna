@@ -41,10 +41,10 @@ public class Match implements Comparable {
     else if(tar == i) return src;
     else return prev.match(i);
   }
-  void match(HashSet<Integer> matches){
+  void match2(HashSet<Integer> matches){
     if(prev != null){
       if(tar != 0) matches.add(tar);
-      prev.match(matches);
+      prev.match2(matches);
     }
   }
 

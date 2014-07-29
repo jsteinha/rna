@@ -49,11 +49,14 @@ public class Simple implements Runnable {
 
   static String uni(char x, char y, int offset){
     if(offset == 0){
-      return x + "=" + y;
+      //return x + "=" + y;
+      return new String(new char[]{x, '=', y});
     } else if(offset > 0){
-      return x+" "+y + "+" + offset;
+      //return x+" "+y + "+" + offset;
+      return new String(new char[]{x, ' ', y, '+', (char)('0'+offset)});
     } else {
-      return x+" "+y + "-" + (-offset);
+      //return x+" "+y + "-" + (-offset);
+      return new String(new char[]{x, ' ', y, '-', (char)('0'-offset)});
     }
   }
 
@@ -153,7 +156,7 @@ public class Simple implements Runnable {
     for(Example ex: examples){
       ex.generateProposals();
     }
-    System.exit(0);
+    //System.exit(0);
 
     for(String str : params.keySet()){
       params.put(str, Math.log(params.get(str) + eta * 1e-1));
@@ -163,13 +166,13 @@ public class Simple implements Runnable {
 
     adagrad = true;
     int numTrain = 1500, numTest = examples.size() - numTrain;
-    for(int t = 1; t <= 15; t++){
+    for(int t = 1; t <= 25; t++){
       LogInfo.begin_track("Starting iteration %d", t);
       double tot = 0.0;
       int count = 0;
       for(Example ex : examples){
         onTest = count++ >= numTrain;
-        int[] pred = predict(ex.seq, ex.N, ex.match);
+        int[] pred = predict(ex);
         double score = sim(pred, ex.match, ex.N);
         LogInfo.begin_track("score="+String.format("%.3f", score));
         for(int i = 1; i <= ex.N; i++)
@@ -191,7 +194,12 @@ public class Simple implements Runnable {
     return ret;
   }
 
-  static int[] predict(final char[] seq, final int N, final int[] match0) throws Exception {
+  static int[] predict(Example ex) throws Exception {
+    final char[] seq = ex.seq;
+    final int N = ex.N;
+    final int[] match0 = ex.match;
+    final ArrayList[] proposals = ex.proposals;
+
     if(B == -1) return new int[N+1];
     List<Match> beam = Collections.synchronizedList(new ArrayList<Match>());
     beam.add(new Match());
@@ -199,31 +207,32 @@ public class Simple implements Runnable {
       final int n = n0;
       List<Match> oldBeam = beam;
       final List<Match> tmpBeam = Collections.synchronizedList(new ArrayList<Match>());
-      final ExecutorService threadPool = Executors.newFixedThreadPool(numThreads);
+      //final ExecutorService threadPool = Executors.newFixedThreadPool(numThreads);
       try {
         for(final Match m : oldBeam){
-          threadPool.submit(new Runnable(){
-            @Override
-            public void run(){
+          //threadPool.submit(new Runnable(){
+            //@Override
+            //public void run(){
               int i = m.match(n);
               if(i > 0){
                 tmpBeam.add(new Match(n, i, m, seq));
               } else {
                 HashSet<Integer> matches = new HashSet<Integer>();
-                m.match(matches);
+                m.match2(matches);
                 tmpBeam.add(new Match(n, 0, m, seq));
-                for(i = n+1; i <= N; i++){
-                  if(!matches.contains(i)){
+                for(Object i2 : proposals[n]){
+                  i = (Integer)i2;
+                  if(i > n && !matches.contains(i)){
                     tmpBeam.add(new Match(n, i, m, seq));
                   }
                 }
               }
-            }
-          });
+            //}
+          //});
         }
       } finally {
-        threadPool.shutdown();
-        threadPool.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+        //threadPool.shutdown();
+        //threadPool.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
       }
       beam = tmpBeam;
       if(n == N){
